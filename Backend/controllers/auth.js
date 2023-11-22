@@ -195,14 +195,48 @@ User.findOne({resetToken: token, resetTokenExpiration: {$gt: Date.now()}})
       path: '/new-password',
       pageTitle: 'New Password',
       errorMessage: message,
-      userId : user._id.toString()
+      userId : user._id.toString(),
+      passwordToken: token
     });
   }
   })
   .catch(err => console.log(err));
+};
 
-  
+exports.postNewPassword = (req, res, next) => {
+  const newPassword = req.body.password;
+  const userId = req.body.userId;
+  const passwordToken = req.body.passwordToken;
+  let resetUser;
+  User.findOne({resetToken: passwordToken, resetTokenExpiration: {$gt: Date.now()}, _id: userId})
+    .then(user => {
+      resetUser = user;
+      return bcrypt.hash(newPassword, 12);
+    })
+    .then(hashedPassword => {
+      resetUser.newPassword = hashedPassword;
+      resetUser.resetToken = undefined;
+      resetUser.resetTokenExpiration = undefined;
+      return resetUser.save(); 
+    })
+    .then(result => {
+      res.redirect('/login');
+      
+      const mailOptions = {
+        from: 'Lebookshop@gmail.com',
+        to: req.body.email,
+        subject: "confirmation de reinitialisation",
+        html:`<p>Votre mot de passe à bien été reinitialisé !</p>
+              <p> pour plus informations, veuillez contactez notre service client.</p>`
+      };
 
-  
-
-} 
+      transporter.sendMail(mailOptions, (err, info) =>{
+        if(err){
+          console.log(err);
+        } else {
+          console.log('Email envoyé: ' + info.response);
+        }
+      });
+    })
+    .catch(err => console.log(err));
+}
