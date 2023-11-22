@@ -1,29 +1,27 @@
-"use strict";
-const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+require('dotenv').config();
 
-const nodemailer = require("nodemailer");
+const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 
 const User = require('../models/user');
+const user = require('../models/user');
 
 const transporter = nodemailer.createTransport({
-  host: "sandbox.smtp.mailtrap.io",
-  port: 2525,
+  service: 'gmail',
   auth: {
-    user: "57fdf3a81d8bdf",
-    pass: "d874a0abd1ac3c"
-  }
+    user:'Koffiangisladhdv7@gmail.com',
+    pass: process.env.pass_Email
+ }
+
 });
 
-
-
-
-
 exports.getLogin = (req, res, next) => {
-  let message = req.flash('erreur');
+  let message = req.flash('error');
   if (message.length > 0) {
     message = message[0];
   } else {
-    message = null
+    message = null;
   }
   res.render('auth/login', {
     path: '/login',
@@ -33,11 +31,11 @@ exports.getLogin = (req, res, next) => {
 };
 
 exports.getSignup = (req, res, next) => {
-  let message = req.flash('erreur');
+  let message = req.flash('error');
   if (message.length > 0) {
     message = message[0];
   } else {
-    message = null
+    message = null;
   }
   res.render('auth/signup', {
     path: '/signup',
@@ -52,7 +50,7 @@ exports.postLogin = (req, res, next) => {
   User.findOne({ email: email })
     .then(user => {
       if (!user) {
-        req.flash('erreur', 'Email ou mot de passe invalide')
+        req.flash('error', 'Invalid email or password.');
         return res.redirect('/login');
       }
       bcrypt
@@ -66,6 +64,7 @@ exports.postLogin = (req, res, next) => {
               res.redirect('/');
             });
           }
+          req.flash('error', 'Invalid email or password.');
           res.redirect('/login');
         })
         .catch(err => {
@@ -83,7 +82,10 @@ exports.postSignup = (req, res, next) => {
   User.findOne({ email: email })
     .then(userDoc => {
       if (userDoc) {
-        req.flash('erreur', "L'email existe déja, veullez entrez une nouvelle adresse mail !")
+        req.flash(
+          'error',
+          'E-Mail exists already, please pick a different one.'
+        );
         return res.redirect('/signup');
       }
       return bcrypt
@@ -98,11 +100,18 @@ exports.postSignup = (req, res, next) => {
         })
         .then(result => {
           res.redirect('/login');
-          transporter.sendMail({
-            to: email,
-            from: 'lebook__shop.com',
-            subject: 'Notification',
-            html: '<h1>Votre inscrition est un succès total</h1>'
+          const mailOptions = {
+            from: 'Lebookshop@gmail.com',
+            to: req.body.email,
+            subject: "Envoi d'email pour votre connexion à Lebook_Shop !",
+            html:`<p>Bonjour à vous, nous sommes heureux de vous revoir</p>`
+          };
+          transporter.sendMail(mailOptions, (err, info) =>{
+            if(err){
+              console.log(err);
+            } else {
+              console.log('Email envoyé: ' + info.response);
+            }
           });
         })
         .catch(err => console.log(err));
@@ -120,15 +129,80 @@ exports.postLogout = (req, res, next) => {
 };
 
 exports.getReset = (req, res, next) => {
-  let message = req.flash('erreur');
+  let message = req.flash('error');
   if (message.length > 0) {
     message = message[0];
   } else {
-    message = null
+    message = null;
   }
   res.render('auth/reset', {
     path: '/reset',
     pageTitle: 'Reset Password',
     errorMessage: message
   });
-}
+};
+
+exports.postReset = (req, res, next) => {
+  crypto.randomBytes(32, (err, buffer) => {
+    if (err) {
+      console.log(err);
+      return res.redirect('/reset');
+    }
+    const token = buffer.toString('hex');
+    User.findOne({ email: req.body.email })
+      .then(user => {
+        if (!user) {
+          req.flash('error', 'No account with that email found.');
+          return res.redirect('/reset');
+        }
+        user.resetToken = token;
+        user.resetTokenExpiration = Date.now() + 3600000;
+        return user.save();
+      })
+      .then(result => {
+        const mailOptions = {
+          from: 'Lebookshop@gmail.com',
+          to: req.body.email,
+          subject: "Reinitialisation de mot de passe",
+          html:`<p>pour la reinitialisation de votre mot de passe</p>
+                <p> Clickez sur ce <a href="http://localhost:3000/reset/${token}">lien</a> pour avoir un nouveau mot de passe !</p>`
+        };
+        transporter.sendMail(mailOptions, (err, info) =>{
+          if(err){
+            console.log(err);
+          } else {
+            console.log('Email envoyé: ' + info.response);
+          }
+        });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  });
+};
+
+exports.getNewPassword = (req, res, next) => {
+const token = req.params.token;
+User.findOne({resetToken: token, resetTokenExpiration: {$gt: Date.now()}})
+  .then(user => {
+    let message = req.flash('error');
+  if (message.length > 0) {
+    message = message[0];
+  } else {
+    message = null;
+
+    res.render('auth/new-password', {
+      path: '/new-password',
+      pageTitle: 'New Password',
+      errorMessage: message,
+      userId : user._id.toString()
+    });
+  }
+  })
+  .catch(err => console.log(err));
+
+  
+
+  
+
+} 
