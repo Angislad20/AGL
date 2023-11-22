@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 
 const User = require('../models/user');
-const user = require('../models/user');
+const { validationResult } = require('express-validator')
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -40,17 +40,33 @@ exports.getSignup = (req, res, next) => {
   res.render('auth/signup', {
     path: '/signup',
     pageTitle: 'Signup',
-    errorMessage: message
+    errorMessage: message,
+    oldInput: {
+      email: '',
+      password: '',
+      confirmPassword: '',
+    },
+    validationErrors: []
   });
 };
 
 exports.postLogin = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
+  const errors = validationResult({req});
+  if(errors.isEmpty()) {
+    return res
+            .status(422)
+            .render('auth/login', {
+              path: '/login',
+              pageTitle: 'Login',
+              errorMessage: errors.array()[0].msg
+            });
+  }
   User.findOne({ email: email })
     .then(user => {
       if (!user) {
-        req.flash('error', 'Invalid email or password.');
+        req.flash('error', 'email ou mot de passe invalide !');
         return res.redirect('/login');
       }
       bcrypt
@@ -64,7 +80,7 @@ exports.postLogin = (req, res, next) => {
               res.redirect('/');
             });
           }
-          req.flash('error', 'Invalid email or password.');
+          req.flash('error', 'email ou mot de passe invalide !');
           res.redirect('/login');
         })
         .catch(err => {
@@ -79,16 +95,32 @@ exports.postSignup = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
   const confirmPassword = req.body.confirmPassword;
+  const errors = validationResult(req);
+  if(!errors.isEmpty()) {
+    return res
+            .status(422)
+            .render('auth/signup', {
+              path: '/signup',
+              pageTitle: 'Signup',
+              errorMessage: errors.array()[0].msg,
+              oldInput: {
+                email: email,
+                password: password,
+                confirmPassword: confirmPassword
+              },
+              validationErrors: errors.array()
+            })
+  }
   User.findOne({ email: email })
     .then(userDoc => {
       if (userDoc) {
         req.flash(
           'error',
-          'E-Mail exists already, please pick a different one.'
+          'Cet email existe déja, veuillez entrez un nouveau !'
         );
         return res.redirect('/signup');
       }
-      return bcrypt
+      bcrypt
         .hash(password, 12)
         .then(hashedPassword => {
           const user = new User({
@@ -116,9 +148,6 @@ exports.postSignup = (req, res, next) => {
         })
         .catch(err => console.log(err));
     })
-    .catch(err => {
-      console.log(err);
-    });
 };
 
 exports.postLogout = (req, res, next) => {
@@ -152,7 +181,7 @@ exports.postReset = (req, res, next) => {
     User.findOne({ email: req.body.email })
       .then(user => {
         if (!user) {
-          req.flash('error', 'No account with that email found.');
+          req.flash('error', "Aucun compte n'est associé à cet email !");
           return res.redirect('/reset');
         }
         user.resetToken = token;
