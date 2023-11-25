@@ -3,6 +3,7 @@ const path = require('path');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.Secret_Key);
 
+
 const PDFDocument = require('pdfkit');
 
 const Product = require('../models/product');
@@ -134,6 +135,11 @@ exports.postCartDeleteProduct = (req, res, next) => {
 };
 
 exports.getCheckout = async (req, res, next) => {
+  function generateImageUrl(imageName) {
+    const baseUrl = 'http://localhost:3000';
+    const imagePath = '/images'; // Le chemin où sont stockées vos images
+    return `${baseUrl}${imagePath}/${imageName}`;
+  }
   await req.user.populate('cart.items.productId'); // Populate the cart items
 
   let products = req.user.cart.items; // Get the cart items
@@ -151,7 +157,7 @@ exports.getCheckout = async (req, res, next) => {
         product_data: {
           name: product.productId.title,
           description: product.productId.description,
-          images: [product.productId.imageUrl],
+          images: [generateImageUrl(product.productId.imageName)],
         },
         unit_amount: product.productId.price * 100, // Amount in cents
       },
@@ -162,6 +168,7 @@ exports.getCheckout = async (req, res, next) => {
     cancel_url: `${req.protocol}://${req.get('host')}/checkout/cancel`
   })
   .then(session => {
+    console.log("Session created successfully");
     res.render('shop/checkout', {
       path: '/checkout',
       pageTitle: 'Checkout',
@@ -171,16 +178,15 @@ exports.getCheckout = async (req, res, next) => {
     });
   })
   .catch(err => {
+    console.error("Error creating session:", err);
     const error = new Error(err);
     error.httpStatusCode = 500;
     return next(error);
   });
  };
     
-exports.getCheckoutSuccess = (req, res, next) => {
-  req.user
-    .populate('cart.items.productId')
-    .execPopulate()
+exports.getCheckoutSuccess = async (req, res, next) => {
+  await req.user.populate('cart.items.productId')
     .then(user => {
       const products = user.cart.items.map(i => {
         return { quantity: i.quantity, product: { ...i.productId._doc } };

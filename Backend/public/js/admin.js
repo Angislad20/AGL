@@ -7,8 +7,12 @@ const deleteProduct = btn => {
   fetch('/admin/product/' + prodId, {
     method: 'DELETE',
     headers: {
-      'csrf-token': csrf
-    }
+      'Content-Type' : 'application/json'
+    },
+    body: JSON.stringify({
+      _csrf: csrf
+  })
+   
   })
     .then(result => {
       return result.json();
